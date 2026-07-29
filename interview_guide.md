@@ -247,87 +247,49 @@ CREATE TABLE car_listings (
 
 ---
 
-## 6. Production Deployment & CI/CD Architecture
+## 6. Production Deployment & Hybrid Cloud Architecture
+
+> [!IMPORTANT]
+> **Vercel vs. Java Spring Boot Hosting Distinction**:
+> Vercel is a platform designed specifically for static site generation, Node.js, and serverless JavaScript functions. **Vercel CANNOT natively execute Java Spring Boot servers (`.jar` or JVM runtimes)**.
+> Therefore, full-stack React + Java Spring Boot applications use a **Hybrid Multi-Cloud Deployment**:
 
 ```mermaid
 graph TD
     Developer[Developer Push to GitHub main] -->|GitHub Webhook| GitHubActions[GitHub Actions CI/CD Pipeline]
     
-    subgraph Frontend Pipeline
-        GitHubActions -->|1. npm install & npm run build| Vercel[Vercel / Netlify / AWS CloudFront]
-        Vercel -->|Serves Static Assets| Users[End Users / Web Browsers]
+    subgraph Frontend Deployment - Vercel / Netlify
+        GitHubActions -->|1. Build Vite Static Assets| Vercel[Vercel Global CDN]
+        Vercel -->|Serves dist/index.html & JS| Users[End User Browsers]
     end
 
-    subgraph Backend Pipeline
+    subgraph Backend Container Hosting - Render / AWS / Railway
         GitHubActions -->|2. Docker Build & Push| DockerHub[Docker Container Registry]
-        DockerHub -->|3. Deploy Docker Image| AWS_EC2[AWS EC2 / Render / Railway]
-        AWS_EC2 -->|4. Runs Spring Boot JAR on Port 8080| SpringBootApp[Spring Boot REST API]
+        DockerHub -->|3. Deploy JRE 17 Container| Render[Render / AWS EC2 / Railway]
+        Render -->|4. Runs Spring Boot JAR on Port 8080| SpringBootApp[Spring Boot REST API]
     end
 
-    subgraph Database Architecture
-        SpringBootApp -->|5. JDBC Connection HikariCP| RDS[(AWS RDS MySQL 8.0 Managed Database)]
+    subgraph Database Managed Hosting
+        SpringBootApp -->|5. HikariCP Connection Pool| ManagedDB[(Render MySQL / AWS RDS 8.0 Database)]
     end
+
+    Users -->|REST API Requests to Backend Domain| Render
 ```
 
 ### Production Deployment Strategy (What to Tell Interviewer)
 
-1. **Frontend Deployment**:
-   - **Host**: Vercel / Netlify / AWS S3 + CloudFront CDN.
-   - **Process**: Vite compiles React code into static production assets (`dist/index.html`, minified JavaScript bundles, CSS).
-   - **CDN & Edge Caching**: Assets are served globally with Gzip/Brotli compression and SSL/TLS certificates.
+1. **Frontend Deployment (Vercel / Netlify)**:
+   - **Host**: Vercel / Netlify.
+   - **Process**: Vercel connects to GitHub repository, runs `npm run build`, and deploys static files (`dist/`).
+   - **Environment Configuration**: Set `VITE_API_BASE_URL=https://motolink-backend.onrender.com/api/v1` in Vercel settings so React calls the production Spring Boot domain.
 
-2. **Backend Deployment**:
-   - **Host**: AWS EC2 / Render / AWS ECS Container Service.
-   - **Docker Containerization**: The Spring Boot app is containerized using a multi-stage `Dockerfile`:
-     - Stage 1: Build JAR using `mvn package -DskipTests`.
-     - Stage 2: Run lightweight `eclipse-temurin:17-jre-alpine` container running `java -jar motolink-backend.jar`.
-   - **Environment Variables**: Sensitive properties (`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_PASSWORD`, `MOTOLINK_JWT_SECRET`) are injected via system environment variables in production.
+2. **Backend Deployment (Render / AWS EC2 / Railway)**:
+   - **Why NOT Vercel for Backend?**: Vercel only supports Node.js/Edge serverless functions and does not support JVM / Java Spring Boot servers.
+   - **Host**: **Render.com** (Web Service Docker deployment) or **AWS EC2 / Railway**.
+   - **Docker Containerization**: Containerized with a multi-stage `Dockerfile`:
+     - Stage 1: Maven build (`mvn package -DskipTests`).
+     - Stage 2: `eclipse-temurin:17-jre-alpine` runtime running `java -jar app.jar`.
 
-3. **Database Deployment**:
-   - **Host**: AWS RDS MySQL 8.0 (Relational Database Service).
-   - **Configuration**: Multi-AZ deployment for high availability, automated daily snapshots, SSL encrypted connections, and HikariCP connection pooling configured in Spring Boot.
-
-4. **CI/CD Automation**:
-   - **Trigger**: Pushing code to `main` branch on GitHub automatically triggers a GitHub Actions workflow.
-   - **Steps**: Runs unit tests -> Builds Vite production bundle -> Builds Docker image -> Deploys automatically to Vercel (Frontend) and Render/AWS (Backend).
-
----
-
-## 7. Interview Questions & Model Answers
-
-### Q1: Can you explain the high-level architecture of MotoLink?
-> **Answer**: MotoLink follows a decoupled Single Page Application (SPA) architecture. The frontend is built with React 18 and Vite for fast rendering and stateful component management. The backend is an enterprise Java Spring Boot 3.2 REST API with Spring Data JPA and Hibernate for Object-Relational Mapping to a MySQL 8.0 database. Communication between React and Spring Boot happens via JSON REST endpoints over HTTP/HTTPS, secured by JWT Bearer tokens.
-
----
-
-### Q2: How is security and authentication handled between Frontend and Backend?
-> **Answer**: Authentication is completely stateless using JWT (JSON Web Tokens). When a user registers or logs in via the Sign In modal, Spring Security authenticates the credentials against MySQL (passwords hashed using BCrypt). Upon success, the server generates a signed JWT containing user claims (ID, email, role: `CUSTOMER` or `ADMIN`) and an expiration timestamp (24 hours). The React client stores this token and includes it in the `Authorization: Bearer <token>` header for subsequent API requests. Spring Security's `JwtAuthenticationFilter` intercepts each request, verifies the HMAC signature, and enforces Role-Based Access Control (RBAC).
-
----
-
-### Q3: How did you implement Admin Panel Security so normal users can't access it?
-> **Answer**: 
-> 1. **UI Security**: The public Navbar has **zero** admin text, hints, or buttons. The "Admin Portal" button renders **only** when a user is authenticated with `role === 'ADMIN'`.
-> 2. **Authentication Security**: Secret Admin credentials (`admin@123` / `12345678`) are validated on the backend. When signed in, the JWT claim assigns `ROLE_ADMIN`.
-> 3. **Backend API Security**: Spring Security filters restrict all `/api/v1/admin/**` REST endpoints using `.hasRole('ADMIN')`. If an unauthenticated user tries to call admin APIs directly via Postman, the backend rejects the request with HTTP `403 Forbidden`.
-
----
-
-### Q4: How does the application handle data state across User Garage and Admin Control Center?
-> **Answer**: On the frontend, React manages stateful activity feeds (`userBookings`, `userRepairs`, `userMods`, `userListings`). When a user submits any form (Rent, Repair, Modify, or Sell), the submission handler constructs a complete payload with customer info (Name, Phone, Driving License) and appends it to the global state. The **User Garage** displays the authenticated user's personal activity, while the **Admin Control Center** aggregates all submissions across all users in real-time, calculating live KPIs (Registered Users, Total Submissions, Gross Revenue in ₹). On the backend, Spring Data JPA repositories persist these entities across `rental_bookings`, `repair_bookings`, `modification_requests`, and `car_listings` tables in MySQL.
-
----
-
-### Q5: Why did you choose Vite over Create-React-App and Spring Boot over Express.js?
-> **Answer**:
-> - **Vite over CRA**: Vite uses native ES Modules (ESM) and esbuild for instant cold server start and sub-millisecond Hot Module Replacement (HMR). Build times are significantly faster (under 350ms).
-> - **Spring Boot over Express.js**: For an Indian automotive super-app handling financial transactions, rental slot locks, and OEM workshop bookings, Spring Boot provides strict type safety, transaction management (`@Transactional`), mature ORM (Hibernate), robust security out of the box (Spring Security), and enterprise scalability.
-
----
-
-### Q6: How is MotoLink deployed to Production?
-> **Answer**: 
-> - **Frontend**: The React application is built using `npm run build` into optimized static assets (`dist/`) and deployed to **Vercel / Netlify / AWS S3 + CloudFront CDN** for fast global distribution and SSL termination.
-> - **Backend**: The Spring Boot backend is containerized using a multi-stage **Docker** build (`Maven package` -> `JRE 17 Container`) and deployed on **AWS EC2 / Render / AWS ECS**. Environment variables (`SPRING_DATASOURCE_URL`, `MOTOLINK_JWT_SECRET`) are injected securely at runtime.
-> - **Database**: Hosted on **AWS RDS MySQL 8.0** with connection pooling configured via HikariCP, multi-AZ failover, and automated backups.
-> - **CI/CD Pipeline**: Integrated with **GitHub Actions**. Every push to the `main` branch triggers automated test suites, Vite bundling, Docker container creation, and continuous deployment.
+3. **Database Hosting**:
+   - **Host**: **Render Managed MySQL** / **Aiven** / **AWS RDS MySQL 8.0**.
+   - **Connection**: Configured using environment variables (`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`).
