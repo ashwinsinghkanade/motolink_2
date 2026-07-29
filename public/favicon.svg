@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="18" fill="url(#bgGrad)" />
+  
+  <!-- Sports Car Vector Silhouette -->
+  <path d="M8 40 L14 34 L24 20 L40 14 L48 24 L56 34 L58 40 L8 40 Z" fill="#FFFFFF" />
+  <path d="M26 21 L37 15 L45 24 Z" fill="#00E5FF" opacity="0.85" />
+  
+  <!-- Front Wheel -->
+  <circle cx="46" cy="42" r="7" fill="#0D111A" stroke="#FFFFFF" stroke-width="3" />
+  <circle cx="46" cy="42" r="2.5" fill="#FF5E00" />
+  
+  <!-- Rear Wheel -->
+  <circle cx="18" cy="42" r="7" fill="#0D111A" stroke="#FFFFFF" stroke-width="3" />
+  <circle cx="18" cy="42" r="2.5" fill="#FF5E00" />
+  
+  <!-- Headlight Cyan Dot -->
+  <circle cx="57" cy="35" r="3" fill="#00E5FF" />
+  
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6A00" />
+      <stop offset="100%" stop-color="#EE0979" />
+    </linearGradient>
+  </defs>
+</svg>
