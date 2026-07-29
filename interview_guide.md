@@ -247,7 +247,53 @@ CREATE TABLE car_listings (
 
 ---
 
-## 6. Interview Questions & Model Answers
+## 6. Production Deployment & CI/CD Architecture
+
+```mermaid
+graph TD
+    Developer[Developer Push to GitHub main] -->|GitHub Webhook| GitHubActions[GitHub Actions CI/CD Pipeline]
+    
+    subgraph Frontend Pipeline
+        GitHubActions -->|1. npm install & npm run build| Vercel[Vercel / Netlify / AWS CloudFront]
+        Vercel -->|Serves Static Assets| Users[End Users / Web Browsers]
+    end
+
+    subgraph Backend Pipeline
+        GitHubActions -->|2. Docker Build & Push| DockerHub[Docker Container Registry]
+        DockerHub -->|3. Deploy Docker Image| AWS_EC2[AWS EC2 / Render / Railway]
+        AWS_EC2 -->|4. Runs Spring Boot JAR on Port 8080| SpringBootApp[Spring Boot REST API]
+    end
+
+    subgraph Database Architecture
+        SpringBootApp -->|5. JDBC Connection HikariCP| RDS[(AWS RDS MySQL 8.0 Managed Database)]
+    end
+```
+
+### Production Deployment Strategy (What to Tell Interviewer)
+
+1. **Frontend Deployment**:
+   - **Host**: Vercel / Netlify / AWS S3 + CloudFront CDN.
+   - **Process**: Vite compiles React code into static production assets (`dist/index.html`, minified JavaScript bundles, CSS).
+   - **CDN & Edge Caching**: Assets are served globally with Gzip/Brotli compression and SSL/TLS certificates.
+
+2. **Backend Deployment**:
+   - **Host**: AWS EC2 / Render / AWS ECS Container Service.
+   - **Docker Containerization**: The Spring Boot app is containerized using a multi-stage `Dockerfile`:
+     - Stage 1: Build JAR using `mvn package -DskipTests`.
+     - Stage 2: Run lightweight `eclipse-temurin:17-jre-alpine` container running `java -jar motolink-backend.jar`.
+   - **Environment Variables**: Sensitive properties (`SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_PASSWORD`, `MOTOLINK_JWT_SECRET`) are injected via system environment variables in production.
+
+3. **Database Deployment**:
+   - **Host**: AWS RDS MySQL 8.0 (Relational Database Service).
+   - **Configuration**: Multi-AZ deployment for high availability, automated daily snapshots, SSL encrypted connections, and HikariCP connection pooling configured in Spring Boot.
+
+4. **CI/CD Automation**:
+   - **Trigger**: Pushing code to `main` branch on GitHub automatically triggers a GitHub Actions workflow.
+   - **Steps**: Runs unit tests -> Builds Vite production bundle -> Builds Docker image -> Deploys automatically to Vercel (Frontend) and Render/AWS (Backend).
+
+---
+
+## 7. Interview Questions & Model Answers
 
 ### Q1: Can you explain the high-level architecture of MotoLink?
 > **Answer**: MotoLink follows a decoupled Single Page Application (SPA) architecture. The frontend is built with React 18 and Vite for fast rendering and stateful component management. The backend is an enterprise Java Spring Boot 3.2 REST API with Spring Data JPA and Hibernate for Object-Relational Mapping to a MySQL 8.0 database. Communication between React and Spring Boot happens via JSON REST endpoints over HTTP/HTTPS, secured by JWT Bearer tokens.
@@ -279,5 +325,9 @@ CREATE TABLE car_listings (
 
 ---
 
-### Q6: How are vehicle images and Metro Cities managed?
-> **Answer**: Metro cities (Mumbai, Delhi NCR, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad) are managed via a centralized dataset (`motolinkData.js`) containing coordinates, popular RTO codes (e.g. `MH-02`, `DL-3C`, `KA-01`), and regional hub locations. All vehicle models (Mahindra Thar 4x4, Tata Nexon EV, Hyundai Creta, Maruti Swift, Toyota Fortuner Legender) have visual assets mapped directly to their model names to ensure 100% accurate visual representation across rentals and pre-owned listings.
+### Q6: How is MotoLink deployed to Production?
+> **Answer**: 
+> - **Frontend**: The React application is built using `npm run build` into optimized static assets (`dist/`) and deployed to **Vercel / Netlify / AWS S3 + CloudFront CDN** for fast global distribution and SSL termination.
+> - **Backend**: The Spring Boot backend is containerized using a multi-stage **Docker** build (`Maven package` -> `JRE 17 Container`) and deployed on **AWS EC2 / Render / AWS ECS**. Environment variables (`SPRING_DATASOURCE_URL`, `MOTOLINK_JWT_SECRET`) are injected securely at runtime.
+> - **Database**: Hosted on **AWS RDS MySQL 8.0** with connection pooling configured via HikariCP, multi-AZ failover, and automated backups.
+> - **CI/CD Pipeline**: Integrated with **GitHub Actions**. Every push to the `main` branch triggers automated test suites, Vite bundling, Docker container creation, and continuous deployment.
